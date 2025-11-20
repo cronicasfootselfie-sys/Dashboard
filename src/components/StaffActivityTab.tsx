@@ -235,10 +235,9 @@ export default function StaffActivityTab() {
                 <Bar 
                   dataKey="count" 
                   barSize={22}
-                  onClick={(data) => {
-                    // Aquí está el cambio - data contiene la información del día clickeado
-                    if (data && data.day) {
-                      setSelectedDay(data.day);
+                  onClick={(data: any) => {
+                    if (data && (data as any).day) {
+                      setSelectedDay((data as any).day);
                     }
                   }}
                   cursor="pointer" // Esto cambia el cursor para indicar que es clickeable
