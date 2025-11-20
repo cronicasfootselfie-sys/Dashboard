@@ -103,10 +103,10 @@ export default function AlertFallasTecnicas({
         const mainItems = await fetchReportGlobal(reportId);
 
         // 2) Intenta construir el mapa con el propio reporte
-        let codeMap = buildCodeMapFromItems([mainItems]);
+        const codeMap = buildCodeMapFromItems([mainItems]);
 
         // 3) Si faltan códigos, recurre a reportes de apoyo secuencialmente
-        const needsCodes = mainItems.some(r => !(String(r?.ce_pacode ?? r?.code ?? "").trim()));
+        const needsCodes = mainItems.some((r: any) => !(String(r?.ce_pacode ?? r?.code ?? "").trim()));
         if (needsCodes) {
           for (const rid of supportReportIds) {
             try {
@@ -117,7 +117,7 @@ export default function AlertFallasTecnicas({
                 if (!codeMap.has(k)) codeMap.set(k, v);
               }
               // break temprano si ya resolvimos todos
-              const solvedAll = mainItems.every(r => {
+              const solvedAll = mainItems.every((r: any) => {
                 const has = String(r?.ce_pacode ?? r?.code ?? "").trim().length > 0;
                 if (has) return true;
                 const rec = String(getRecordId(r) ?? "").trim();
