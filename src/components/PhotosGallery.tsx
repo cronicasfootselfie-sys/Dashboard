@@ -6,6 +6,9 @@ import Image from "next/image";
 import { getFirestore, collection, getDocs, query, where, orderBy, limit } from "firebase/firestore";
 import { getSingleProfileIdByRedcap } from "@/lib/redcapFirestore";
 
+// Fecha de corte: solo mostrar datos desde el 18/12/2025
+const CUTOFF_DATE = new Date('2025-12-18T00:00:00.000Z');
+
 type Lesion = {
   classId?: number;
   className?: string;
@@ -99,6 +102,7 @@ export default function PhotosGallery({
         const q = query(
           collection(db, "photoHistory"),
           where("profileId", "==", resolvedProfileId),
+          where("date", ">=", CUTOFF_DATE),
           orderBy("date", "desc"),
           limit(max)
         );
