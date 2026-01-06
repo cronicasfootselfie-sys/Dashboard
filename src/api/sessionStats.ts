@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as admin from "firebase-admin";
-import { requireAuth, stats, addDays } from "./_utils";
+import { requireAuth, stats, addDays, applyCutoffDate } from "./_utils";
 
 const db = admin.firestore();
 
@@ -20,7 +20,7 @@ export async function sessionStatsHandler(req: any, res: any) {
     const profileId = (req.query.profileId as string) || null;
 
     const now = new Date();
-    const since = addDays(now, -days);
+    const since = applyCutoffDate(addDays(now, -days));
 
     let qs: FirebaseFirestore.Query = db.collection("sessions")
       .where("startedAt", ">=", since)
