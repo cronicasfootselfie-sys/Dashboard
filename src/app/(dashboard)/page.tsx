@@ -24,6 +24,34 @@ import {
   ComposedChart
 } from "recharts";
 
+// Fecha de corte: solo mostrar datos desde el 18/12/2025
+const CUTOFF_DATE = new Date('2025-12-18T00:00:00.000Z');
+const CUTOFF_DATE_STR = '2025-12-18';
+
+// Función helper para filtrar datos por fecha de corte
+function filterByCutoffDate<T extends { day?: string }>(data: T[]): T[] {
+  return data.filter(item => {
+    const day = item.day;
+    if (!day) return false;
+    return day >= CUTOFF_DATE_STR;
+  });
+}
+
+// Función helper para filtrar usuarios nuevos por mes
+// Excluye meses anteriores a diciembre 2025
+// Para diciembre 2025, mantiene el mes (el backend debe contar solo desde el 18/12)
+function filterUsersPerMonth(data: Array<{ month: string; count: number }>): Array<{ month: string; count: number }> {
+  return data.filter(item => {
+    if (!item.month) return false;
+    // Formato esperado: "2025-12", "2025-11", etc.
+    const monthStr = item.month.trim();
+    
+    // Solo incluir diciembre 2025 y meses posteriores
+    // "2025-12" >= "2025-12" es true
+    return monthStr >= "2025-12";
+  });
+}
+
 const tooltipStyle = { background: "#0b1220", border: "1px solid #1f2937", borderRadius: 8, color: "#ededed" };
 const tooltipItem  = { color: "#ededed" };
 const tooltipLabel = { color: "#9ca3af" };
@@ -195,12 +223,26 @@ const {
     });
   }, [results]);
 
+  // Filtrar datos por fecha de corte antes de mostrar
+  const filteredPorDia = useMemo(() => {
+    return filterByCutoffDate(camera?.porDia ?? []);
+  }, [camera?.porDia]);
+
+  const filteredSustainedSeries = useMemo(() => {
+    if (!sustained?.weeklySeries) return [];
+    return sustained.weeklySeries.filter(item => item.weekStart >= CUTOFF_DATE_STR);
+  }, [sustained?.weeklySeries]);
+
+  const filteredUsersPerMonth = useMemo(() => {
+    return filterUsersPerMonth(usersPerMonth ?? []);
+  }, [usersPerMonth]);
+
   // Helpers
-  const hasPorDia = (camera?.porDia?.length ?? 0) > 0;
+  const hasPorDia = filteredPorDia.length > 0;
   const hasPorHora = (camera?.porHora?.some(d => d.count > 0) ?? false);
-  const hasUsersPerMonth = (usersPerMonth?.length ?? 0) > 0;
+  const hasUsersPerMonth = filteredUsersPerMonth.length > 0;
   const hasPie = pieData.length > 0;
-  const hasSustainedSeries = (sustained?.weeklySeries?.length ?? 0) > 0;
+  const hasSustainedSeries = filteredSustainedSeries.length > 0;
   const baseProfileOptions = useMemo(
   () => (sustained?.photosPerProfile ?? []).map(p => ({ profileId: p.profileId })),
   [sustained]
@@ -573,7 +615,7 @@ useEffect(() => {
               {hasPorDia ? (
                 <div style={{ width: "100%", height: 300 }}>
                   <ResponsiveContainer>
-                    <LineChart data={camera?.porDia ?? []}>
+                    <LineChart data={filteredPorDia}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="day" tick={{ fill: "#9ca3af" }} />
                       <YAxis tick={{ fill: "#9ca3af" }} />
@@ -611,7 +653,7 @@ useEffect(() => {
             {hasPorDia ? (
               <div style={{ width: "100%", height: 300 }}>
                 <ResponsiveContainer>
-                  <LineChart data={camera?.porDia ?? []}>
+                  <LineChart data={filteredPorDia}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="day" tick={{ fill: "#9ca3af" }} />
                     <YAxis tick={{ fill: "#9ca3af" }} />
@@ -731,7 +773,7 @@ useEffect(() => {
               {hasUsersPerMonth ? (
                 <div style={{ width: "100%", height: 300 }}>
                   <ResponsiveContainer>
-                    <BarChart data={usersPerMonth}>
+                    <BarChart data={filteredUsersPerMonth}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="month" tick={{ fill: "#9ca3af" }} />
                       <YAxis tick={{ fill: "#9ca3af" }} />
@@ -741,6 +783,9 @@ useEffect(() => {
                   </ResponsiveContainer>
                 </div>
               ) : <Empty />}
+              <p className="text-xs opacity-70 mt-2">
+                Nota: Diciembre 2025 cuenta solo desde el 18/12/2025 en adelante.
+              </p>
             </Card>
 
             
@@ -836,7 +881,7 @@ useEffect(() => {
           {hasSustainedSeries ? (
             <div className="mt-6" style={{ width: "100%", height: 320 }}>
               <ResponsiveContainer>
-                <ComposedChart data={sustained?.weeklySeries ?? []}>
+                <ComposedChart data={filteredSustainedSeries}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="weekStart" tick={{ fill: "#9ca3af" }} />
                   <YAxis yAxisId="left" tick={{ fill: "#9ca3af" }} />
