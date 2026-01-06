@@ -47,9 +47,12 @@ export default function StaffActivityTab() {
   const [err, setErr] = useState<string | null>(null);
 
   // === filtros UI ===
+  // Fecha de corte: solo mostrar datos desde el 18/12/2025
+  const CUTOFF_DATE_STR = '2025-12-18';
+  
   const [dayFrom, setDayFrom] = useState(() => {
-    const d = new Date(); d.setDate(d.getDate() - 30);
-    return ymd(d);
+    // Fecha predeterminada: 18/12/2025
+    return CUTOFF_DATE_STR;
   });
   const [dayTo, setDayTo] = useState(() => ymd(new Date()));
   const [userOptions, setUserOptions] = useState<string[]>([]);
