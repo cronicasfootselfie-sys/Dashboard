@@ -57,3 +57,13 @@ export function stats(arr: number[]): StatsNum {
   const std = Math.sqrt(arr.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / arr.length);
   return { mean, median, std, iqr: { q1, q3 } };
 }
+
+// Fecha de corte: solo mostrar datos desde el 18/12/2025
+export const CUTOFF_DATE = new Date('2025-12-18T00:00:00.000Z');
+
+/**
+ * Aplica la fecha de corte: retorna la fecha más reciente entre la fecha calculada y el corte
+ */
+export function applyCutoffDate(calculatedDate: Date): Date {
+  return calculatedDate < CUTOFF_DATE ? CUTOFF_DATE : calculatedDate;
+}
