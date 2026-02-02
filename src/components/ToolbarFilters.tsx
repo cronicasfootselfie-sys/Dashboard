@@ -14,6 +14,14 @@ type Props = {
   days: number | "all";
   setDays: (v: number | "all") => void;
 
+  // 🆕 Rango de fechas personalizado
+  dateFrom?: string;
+  setDateFrom?: (v: string) => void;
+  dateTo?: string;
+  setDateTo?: (v: string) => void;
+  useDateRange?: boolean;
+  setUseDateRange?: (v: boolean) => void;
+
   weeks: number;
   setWeeks: (v: number) => void;
 
@@ -58,8 +66,14 @@ function Label({ children, tip }: { children: React.ReactNode; tip?: string }) {
   );
 }
 
+// Fecha de corte: solo mostrar datos desde el 18/12/2025
+const CUTOFF_DATE_STR = '2025-12-18';
+
 export default function ToolbarFilters({
   days, setDays,
+  dateFrom, setDateFrom,
+  dateTo, setDateTo,
+  useDateRange, setUseDateRange,
   weeks, setWeeks,
   minPerWeek, setMinPerWeek,
   mode, setMode,
@@ -91,6 +105,9 @@ export default function ToolbarFilters({
   const showFullControls = userRole === 'full';
   const showSustainedControls = showFullControls && !hideSustainedControls;
 
+  // Helper para obtener fecha actual en formato YYYY-MM-DD
+  const today = new Date().toISOString().slice(0, 10);
+
   return (
     <div className="sticky top-0 z-10 -mx-6 px-6 py-3 bg-neutral-950/80 backdrop-blur border-b border-neutral-900">
       <div className="flex flex-col md:flex-row md:items-center gap-3 justify-between">
@@ -102,25 +119,86 @@ export default function ToolbarFilters({
             <Label tip="Afecta 'Actividad', 'Resultados IA', 'Calidad' y 'Sesiones'. 'Histórico' ignora la fecha.">
               Rango
             </Label>
-            <select
-              className="select"
-              value={String(days)}
-              onChange={(e) => setDays(e.target.value === "all" ? "all" : parseInt(e.target.value))}
-            >
-              <option value="7">7 días</option>
-              <option value="30">30 días</option>
-              <option value="90">90 días</option>
-              <option value="all">Histórico</option>
-            </select>
+            
+            {/* Toggle entre días predefinidos y rango personalizado */}
+            {setUseDateRange && (
+              <label className="flex items-center gap-2 text-xs text-neutral-400 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={useDateRange}
+                  onChange={(e) => {
+                    setUseDateRange(e.target.checked);
+                    if (!e.target.checked) {
+                      // Al desactivar, volver a días predefinidos
+                      setDays(30);
+                    }
+                  }}
+                  className="w-4 h-4"
+                />
+                <span>Rango personalizado</span>
+              </label>
+            )}
 
-            {/* Presets rápidos - Solo para acceso completo */}
-            {showFullControls && (
-              <div className="hidden sm:flex items-center gap-1">
-                <button className="chip" onClick={() => setDays(7)}>7d</button>
-                <button className="chip" onClick={() => setDays(30)}>30d</button>
-                <button className="chip" onClick={() => setDays(90)}>90d</button>
-                <button className="chip" onClick={() => setDays("all")}>Hist.</button>
+            {useDateRange && setDateFrom && setDateTo && dateFrom && dateTo ? (
+              // Rango de fechas personalizado
+              <div className="flex items-center gap-2">
+                <div className="flex flex-col">
+                  <label className="text-xs text-neutral-400 mb-1">Desde</label>
+                  <input
+                    type="date"
+                    className="input text-sm"
+                    value={dateFrom}
+                    min={CUTOFF_DATE_STR}
+                    max={dateTo || today}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val >= CUTOFF_DATE_STR) {
+                        setDateFrom(val);
+                      }
+                    }}
+                  />
+                </div>
+                <div className="flex flex-col">
+                  <label className="text-xs text-neutral-400 mb-1">Hasta</label>
+                  <input
+                    type="date"
+                    className="input text-sm"
+                    value={dateTo}
+                    min={dateFrom || CUTOFF_DATE_STR}
+                    max={today}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val >= (dateFrom || CUTOFF_DATE_STR)) {
+                        setDateTo(val);
+                      }
+                    }}
+                  />
+                </div>
               </div>
+            ) : (
+              // Selector de días predefinidos
+              <>
+                <select
+                  className="select"
+                  value={String(days)}
+                  onChange={(e) => setDays(e.target.value === "all" ? "all" : parseInt(e.target.value))}
+                >
+                  <option value="7">7 días</option>
+                  <option value="30">30 días</option>
+                  <option value="90">90 días</option>
+                  <option value="all">Histórico</option>
+                </select>
+
+                {/* Presets rápidos - Solo para acceso completo */}
+                {showFullControls && (
+                  <div className="hidden sm:flex items-center gap-1">
+                    <button className="chip" onClick={() => setDays(7)}>7d</button>
+                    <button className="chip" onClick={() => setDays(30)}>30d</button>
+                    <button className="chip" onClick={() => setDays(90)}>90d</button>
+                    <button className="chip" onClick={() => setDays("all")}>Hist.</button>
+                  </div>
+                )}
+              </>
             )}
           </div>
 

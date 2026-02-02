@@ -103,6 +103,14 @@ export default function DashboardPage() {
   const { user, userRole } = useAuth();
   const { options: redcapOptions, loading: loadingRedcapCodes } = useRedcapOptions();
   const [days, setDays] = useState<number | "all">(30);
+  
+  // 🆕 Rango de fechas personalizado
+  const [useDateRange, setUseDateRange] = useState<boolean>(false);
+  const [dateFrom, setDateFrom] = useState<string>(() => CUTOFF_DATE_STR);
+  const [dateTo, setDateTo] = useState<string>(() => {
+    return new Date().toISOString().slice(0, 10);
+  });
+  
   const [weeks, setWeeks] = useState<number>(8);
   const [minPerWeek, setMinPerWeek] = useState<number>(1);
   const [fallas, setFallas] = useState<number>(0);
@@ -194,10 +202,23 @@ const allowedPacodes = useMemo(
   [redcapFromUrl, profileIdsByRedcap, allProfilesWithAnyRedcap]
 );
 const redcapKey = redcapFromUrl || "ALL";
+
+// Calcular días cuando se usa rango personalizado
+const effectiveDays = useMemo(() => {
+  if (useDateRange && dateFrom && dateTo) {
+    const from = new Date(dateFrom);
+    const to = new Date(dateTo);
+    const diffTime = Math.abs(to.getTime() - from.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 para incluir ambos días
+    return diffDays;
+  }
+  return days;
+}, [useDateRange, dateFrom, dateTo, days]);
+
 const {
   loading, error, kpis, camera, results,
   usersPerMonth, actives, sustained, sessions, quality, reload
-} = useDashboardData(days, {
+} = useDashboardData(effectiveDays, {
   sustainedWeeks: weeks,
   minPerWeek,
   profileId: mode === "profile" && profileId ? profileId : undefined, // sólo en modo perfil
@@ -223,15 +244,34 @@ const {
     });
   }, [results]);
 
-  // Filtrar datos por fecha de corte antes de mostrar
+  // Filtrar datos por fecha de corte y rango personalizado antes de mostrar
   const filteredPorDia = useMemo(() => {
-    return filterByCutoffDate(camera?.porDia ?? []);
-  }, [camera?.porDia]);
+    let filtered = filterByCutoffDate(camera?.porDia ?? []);
+    
+    // Si se usa rango personalizado, aplicar filtro adicional
+    if (useDateRange && dateFrom && dateTo) {
+      filtered = filtered.filter(item => {
+        if (!item.day) return false;
+        return item.day >= dateFrom && item.day <= dateTo;
+      });
+    }
+    
+    return filtered;
+  }, [camera?.porDia, useDateRange, dateFrom, dateTo]);
 
   const filteredSustainedSeries = useMemo(() => {
     if (!sustained?.weeklySeries) return [];
-    return sustained.weeklySeries.filter(item => item.weekStart >= CUTOFF_DATE_STR);
-  }, [sustained?.weeklySeries]);
+    let filtered = sustained.weeklySeries.filter(item => item.weekStart >= CUTOFF_DATE_STR);
+    
+    // Si se usa rango personalizado, aplicar filtro adicional
+    if (useDateRange && dateFrom && dateTo) {
+      filtered = filtered.filter(item => {
+        return item.weekStart >= dateFrom && item.weekStart <= dateTo;
+      });
+    }
+    
+    return filtered;
+  }, [sustained?.weeklySeries, useDateRange, dateFrom, dateTo]);
 
   const filteredUsersPerMonth = useMemo(() => {
     return filterUsersPerMonth(usersPerMonth ?? []);
@@ -565,6 +605,9 @@ useEffect(() => {
     <div className="space-y-6">
       <ToolbarFilters
         days={days} setDays={setDays}
+        dateFrom={dateFrom} setDateFrom={setDateFrom}
+        dateTo={dateTo} setDateTo={setDateTo}
+        useDateRange={useDateRange} setUseDateRange={setUseDateRange}
         weeks={weeks} setWeeks={setWeeks}
         minPerWeek={minPerWeek} setMinPerWeek={setMinPerWeek}
         mode={mode} setMode={setMode}

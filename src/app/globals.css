@@ -1,15 +1,15 @@
 @import "tailwindcss";
 
-/* ---------- Tema base ---------- */
+/* ---------- Tema base (SIEMPRE modo oscuro) ---------- */
 :root {
-  /* layout */
-  --background: #ffffff;
-  --foreground: #171717;
+  /* layout - siempre oscuro */
+  --background: #0a0a0a;    /* page bg */
+  --foreground: #ededed;    /* base text */
 
-  /* paneles / bordes / textos secundarios */
-  --panel: #f8fafc;           /* slate-50  */
-  --panel-border: #e5e7eb;    /* gray-200  */
-  --muted: #6b7280;           /* gray-500  */
+  /* paneles / bordes / textos secundarios - siempre oscuro */
+  --panel: #0f172a;         /* slate-900 */
+  --panel-border: #1f2937;  /* gray-800  */
+  --muted: #9ca3af;         /* gray-400  */
 
   /* paleta de acento para charts / UI */
   --primary: #60a5fa;   /* azul */
@@ -36,30 +36,16 @@
   --font-mono: var(--font-geist-mono);
 }
 
-/* ---------- Dark mode ---------- */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;    /* page bg */
-    --foreground: #ededed;    /* base text */
-
-    --panel: #0f172a;         /* slate-900 */
-    --panel-border: #1f2937;  /* gray-800  */
-    --muted: #9ca3af;         /* gray-400  */
-
-    --primary: #60a5fa;
-    --accent:  #a78bfa;
-    --success: #34d399;
-    --warning: #fbbf24;
-    --danger:  #ef4444;
-  }
-}
-
 /* ---------- Reset básico + fuente ---------- */
 * { box-sizing: border-box; }
-html, body { height: 100%; }
+html, body { 
+  height: 100%; 
+  background: #0a0a0a !important;  /* Forzar fondo oscuro siempre */
+  color: #ededed !important;        /* Forzar texto claro siempre */
+}
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--background) !important;
+  color: var(--foreground) !important;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
@@ -71,9 +57,9 @@ body {
 a { color: inherit; text-decoration: none; }
 button, select { outline: none; }
 
-/* Inputs/selects (con buen contraste en dark) */
+/* Inputs/selects (siempre con estilo oscuro) */
 select {
-  background: #0b1220;             /* profundo para dark */
+  background: #0b1220;             /* profundo */
   color: var(--foreground);
   border: 1px solid var(--panel-border);
   border-radius: 0.5rem;
@@ -143,13 +129,13 @@ button.primary:hover { filter: brightness(1.05); }
   color: #fff;
 }
 
-/* Helpers visuales para filtros (sin @apply) */
+/* Helpers visuales para filtros (sin @apply) - siempre oscuro */
 .select {
   padding: 0.5rem 0.75rem;        /* px-3 py-2 */
   border-radius: 0.5rem;          /* rounded-lg */
-  background: #0b1220;            /* bg-neutral-900 aprox en dark */
-  color: var(--foreground);
-  border: 1px solid var(--panel-border); /* border-neutral-800 aprox */
+  background: #0b1220 !important;            /* bg-neutral-900 aprox */
+  color: #ededed !important;                  /* texto claro */
+  border: 1px solid #1f2937 !important;       /* border-neutral-800 */
   font-size: 0.875rem;            /* text-sm */
 }
 
@@ -169,18 +155,20 @@ button.primary:hover { filter: brightness(1.05); }
   line-height: 1rem;
   padding: 0.25rem 0.5rem;        /* px-2 py-1 */
   border-radius: 0.375rem;        /* rounded-md */
-  background: #1f2937;            /* neutral-800 */
-  border: 1px solid #374151;      /* neutral-700 */
+  background: #1f2937 !important;            /* neutral-800 - siempre oscuro */
+  border: 1px solid #374151 !important;      /* neutral-700 */
+  color: #ededed !important;                 /* texto claro */
 }
-.chip:hover { background: #111827; }       /* neutral-900-ish */
+.chip:hover { background: #111827 !important; }       /* neutral-900-ish */
 
 .chip-muted {
   font-size: 0.75rem;
   line-height: 1rem;
   padding: 0.25rem 0.5rem;
   border-radius: 0.375rem;
-  background: #0b1220;            /* neutral-900 aprox */
-  border: 1px solid var(--panel-border);   /* neutral-800 aprox */
+  background: #0b1220 !important;            /* neutral-900 aprox - siempre oscuro */
+  border: 1px solid #1f2937 !important;    /* neutral-800 aprox */
+  color: #9ca3af !important;                 /* texto muted */
 }
 
 .divider {
