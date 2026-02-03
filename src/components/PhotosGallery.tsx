@@ -21,6 +21,7 @@ type PhotoRow = {
   id: string;
   date?: any;               // Firestore Timestamp o string
   imageUrl?: string;
+  storagePath?: string;
   profileId: string;
   resultDetails?: Lesion[];
   summary?: string;
@@ -35,6 +36,51 @@ function fmtDate(d: any) {
   } catch {
     return String(d ?? "-");
   }
+}
+
+function tsMs(d: any): number {
+  try {
+    if (!d) return 0;
+    if (typeof d === "object" && "seconds" in d) {
+      const ms = Number(d.seconds) * 1000 + Math.floor(Number(d.nanoseconds || 0) / 1e6);
+      return Number.isFinite(ms) ? ms : 0;
+    }
+    const t = new Date(d).getTime();
+    return Number.isFinite(t) ? t : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function decodeStoragePathFromFirebaseUrl(url?: string) {
+  // https://firebasestorage.googleapis.com/v0/b/<bucket>/o/<ENCODED_PATH>?alt=media&token=...
+  try {
+    if (!url) return null;
+    const marker = "/o/";
+    const idx = url.indexOf(marker);
+    if (idx < 0) return null;
+    const rest = url.slice(idx + marker.length);
+    const encodedPath = rest.split("?")[0];
+    return decodeURIComponent(encodedPath);
+  } catch {
+    return null;
+  }
+}
+
+function dedupeRows(rows: PhotoRow[]) {
+  // Mantiene el primero (más reciente) por cada storagePath (si existe) o por imageUrl/path.
+  const seen = new Set<string>();
+  const out: PhotoRow[] = [];
+  for (const r of rows) {
+    const key =
+      r.storagePath ||
+      decodeStoragePathFromFirebaseUrl(r.imageUrl) ||
+      (r.imageUrl ? `url:${r.imageUrl}` : `id:${r.id}`);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(r);
+  }
+  return out;
 }
 
 export default function PhotosGallery({
@@ -107,10 +153,16 @@ export default function PhotosGallery({
           limit(max)
         );
         const snap = await getDocs(q);
-        const items: PhotoRow[] = snap.docs.map((d) => ({
+        const itemsRaw: PhotoRow[] = snap.docs.map((d) => ({
           id: d.id,
           ...(d.data() as any),
         }));
+
+        // Orden estable por fecha desc (por si hay empates/strings)
+        const sorted = itemsRaw.slice().sort((a, b) => tsMs(b.date) - tsMs(a.date));
+
+        // Dedup visual (no borra nada de Firestore)
+        const items = dedupeRows(sorted);
         setRows(items);
       } catch (e: any) {
         setErr(e?.message || "Error leyendo photoHistory");

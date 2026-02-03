@@ -1,0 +1,7 @@
+.next/
+node_modules/
+.env*
+
+# Firebase Admin SDK private key (DO NOT COMMIT)
+foot-selfie---multiplatform-firebase-adminsdk-*.json
+
