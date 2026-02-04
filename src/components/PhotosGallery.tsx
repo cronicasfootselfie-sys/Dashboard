@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import Card from "@/components/Card";
 import Image from "next/image";
 import { getFirestore, collection, getDocs, query, where, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData } from "firebase/firestore";
@@ -58,8 +58,8 @@ export default function PhotosGallery({
   // Paginación
   const [photosPerPage, setPhotosPerPage] = useState(20);
   const [currentPage, setCurrentPage] = useState(1);
-  const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
-  const [pageStack, setPageStack] = useState<QueryDocumentSnapshot<DocumentData>[]>([]); // Stack para navegación hacia atrás
+  const lastDocRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const pageStackRef = useRef<QueryDocumentSnapshot<DocumentData>[]>([]); // Stack para navegación hacia atrás
   const [hasNextPage, setHasNextPage] = useState(false);
   const [hasPrevPage, setHasPrevPage] = useState(false);
   const [totalPhotos, setTotalPhotos] = useState<number | null>(null);
@@ -77,8 +77,8 @@ export default function PhotosGallery({
     setResolutionStatus("idle");
     setRows([]);
     setCurrentPage(1);
-    setLastDoc(null);
-    setPageStack([]);
+    lastDocRef.current = null;
+    pageStackRef.current = [];
 
     (async () => {
       if (mode === "profile") {
@@ -127,8 +127,8 @@ export default function PhotosGallery({
         // Si no es la primera página, usar startAfter con el documento del stack
         if (currentPage > 1) {
           // Si tenemos el documento de la página anterior en el stack, usarlo
-          if (pageStack.length >= currentPage - 1) {
-            const docToStartAfter = pageStack[currentPage - 2];
+          if (pageStackRef.current.length >= currentPage - 1) {
+            const docToStartAfter = pageStackRef.current[currentPage - 2];
             q = query(
               collection(db, "photoHistory"),
               where("profileId", "==", resolvedProfileId),
@@ -155,7 +155,7 @@ export default function PhotosGallery({
         let docs = snap.docs;
         
         // Si recargamos desde el inicio (para retroceder), saltar las páginas anteriores
-        if (currentPage > 1 && pageStack.length < currentPage - 1) {
+        if (currentPage > 1 && pageStackRef.current.length < currentPage - 1) {
           const skipPages = currentPage - 1;
           const skipDocs = skipPages * photosPerPage;
           docs = docs.slice(skipDocs);
@@ -173,11 +173,11 @@ export default function PhotosGallery({
         // Guardar último documento para navegación hacia adelante
         if (docs.length > 0) {
           const newLastDoc = docs[docs.length - 1];
-          setLastDoc(newLastDoc);
+          lastDocRef.current = newLastDoc;
           
           // Si avanzamos a una nueva página, guardar en el stack
-          if (currentPage > pageStack.length) {
-            setPageStack(prev => [...prev, newLastDoc]);
+          if (currentPage > pageStackRef.current.length) {
+            pageStackRef.current = [...pageStackRef.current, newLastDoc];
           }
         }
         
@@ -192,21 +192,22 @@ export default function PhotosGallery({
         setLoading(false);
       }
     })();
-  }, [db, resolvedProfileId, resolutionStatus, photosPerPage, currentPage, lastDoc, pageStack]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [db, resolvedProfileId, resolutionStatus, photosPerPage, currentPage]);
 
   // Resetear a página 1 cuando cambia photosPerPage
   useEffect(() => {
     if (currentPage !== 1) {
       setCurrentPage(1);
-      setLastDoc(null);
-      setPageStack([]);
+      lastDocRef.current = null;
+      pageStackRef.current = [];
     }
   }, [photosPerPage]);
 
   const handleNextPage = () => {
-    if (hasNextPage && lastDoc) {
+    if (hasNextPage && lastDocRef.current) {
       // Guardar el último doc actual en el stack antes de avanzar
-      setPageStack(prev => [...prev, lastDoc!]);
+      pageStackRef.current = [...pageStackRef.current, lastDocRef.current];
       setCurrentPage(prev => prev + 1);
     }
   };
@@ -218,8 +219,8 @@ export default function PhotosGallery({
       const targetPage = currentPage - 1;
       setCurrentPage(targetPage);
       // Limpiar el stack hasta la página objetivo
-      setPageStack(prev => prev.slice(0, targetPage - 1));
-      setLastDoc(null);
+      pageStackRef.current = pageStackRef.current.slice(0, targetPage - 1);
+      lastDocRef.current = null;
     }
   };
 
