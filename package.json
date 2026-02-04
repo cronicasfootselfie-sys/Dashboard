@@ -7,7 +7,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "backfill:photoHistory": "node scripts/backfill-photoHistory.cjs"
+    "backfill:photoHistory": "node scripts/backfill-photoHistory.cjs",
+    "list:users-profiles": "node scripts/list-users-profiles.cjs",
+    "count:photos": "node scripts/count-photos-by-source.cjs",
+    "identify:orphans": "node scripts/identify-orphan-files.cjs",
+    "cleanup:duplicates": "node scripts/cleanup-duplicate-backfilled.cjs",
+    "backup:before-cleanup": "node scripts/backup-before-cleanup.cjs"
   },
   "dependencies": {
     "firebase": "^12.2.1",

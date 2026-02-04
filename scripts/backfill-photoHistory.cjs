@@ -221,14 +221,27 @@ async function listProfileIdsFromUsers(db, usersSinceDate, limitUsers, limitProf
 }
 
 async function loadExistingStoragePathsForProfile(db, profileId) {
-  const snap = await db.collection("photoHistory").where("profileId", "==", profileId).select("imageUrl").get();
+  // Cargamos TODOS los campos (no solo imageUrl) para poder ver storagePath también
+  const snap = await db.collection("photoHistory").where("profileId", "==", profileId).get();
   const set = new Set();
   snap.forEach((doc) => {
     const data = doc.data() || {};
+    
+    // 1. Si tiene storagePath explícito, usarlo directamente (más confiable)
+    if (typeof data.storagePath === "string" && data.storagePath.trim()) {
+      set.add(data.storagePath.trim());
+    }
+    
+    // 2. Si no, intentar extraer del imageUrl
     const url = data.imageUrl;
-    if (typeof url !== "string") return;
-    const path = decodeStoragePathFromFirebaseUrl(url);
-    if (path) set.add(path);
+    if (typeof url === "string") {
+      const path = decodeStoragePathFromFirebaseUrl(url);
+      if (path) set.add(path);
+      // También agregar el imageUrl completo como fallback (por si hay variaciones de token)
+      // pero normalizado (sin token para comparar)
+      const urlWithoutToken = url.split("&token=")[0].split("?token=")[0];
+      if (urlWithoutToken) set.add(`url:${urlWithoutToken}`);
+    }
   });
   return { count: snap.size, paths: set };
 }
@@ -360,7 +373,16 @@ async function backfillProfile({
   for (const f of imageFiles) {
     if (!f.name) continue;
     if (!f.name.includes(`/${profileId}/`)) continue;
-    if (existing.paths.has(f.name)) continue;
+    
+    // Verificar si ya existe: por storagePath directo o por URL normalizada
+    const storagePath = f.name;
+    if (existing.paths.has(storagePath)) continue;
+    
+    // También verificar si hay un doc con imageUrl que apunte al mismo archivo
+    // (normalizando la URL sin token)
+    const tempUrl = buildFirebaseDownloadUrl(bucketName, storagePath, null);
+    const urlWithoutToken = tempUrl.split("&token=")[0].split("?token=")[0];
+    if (existing.paths.has(`url:${urlWithoutToken}`)) continue;
 
     if (onlyRejected && !isRejectedByName(f.name)) continue;
 

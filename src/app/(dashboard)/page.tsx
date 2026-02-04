@@ -1040,7 +1040,7 @@ useEffect(() => {
     mode={mode}
     redcapCode={redcapFromUrl || ""}
     profileIdFromMode={profileId || undefined}
-    max={60}
+    max={200}
   />
 )}
 {tab === "staff" && userRole === 'full' && <StaffActivityTab />}
