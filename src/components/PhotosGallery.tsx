@@ -131,6 +131,10 @@ export default function PhotosGallery({
       return;
     }
 
+    // Extraer valores para que TypeScript entienda que no son null
+    const userEmail = user.email;
+    const userId = user.uid;
+
     if (labelingPhotoId === photoId) {
       return; // Ya se está procesando
     }
@@ -152,7 +156,7 @@ export default function PhotosGallery({
         const existingLabels = currentData?.trainingLabels || {};
 
         // Verificar si el usuario ya votó con el mismo valor (prevenir spam)
-        const userExistingVote = existingLabels[user.email];
+        const userExistingVote = existingLabels[userEmail];
         if (userExistingVote?.isCorrectFoot === isCorrectFoot) {
           return; // Ya votó esto, no hacer nada
         }
@@ -160,11 +164,11 @@ export default function PhotosGallery({
         // Actualizar o crear el voto del usuario
         const updatedLabels = {
           ...existingLabels,
-          [user.email]: {
+          [userEmail]: {
             isCorrectFoot,
-            labeledBy: user.email,
+            labeledBy: userEmail,
             labeledAt: serverTimestamp(),
-            userId: user.uid,
+            userId: userId,
           },
         };
 
@@ -186,17 +190,17 @@ export default function PhotosGallery({
         }
 
         // Actualizar documento
-        transaction.update(photoRef, {
-          trainingLabels: updatedLabels,
-          trainingLabelStatus: {
-            consensus,
-            lastLabeledBy: user.email,
-            lastLabeledAt: serverTimestamp(),
-            totalVoters,
-            correctVotes,
-            incorrectVotes,
-          },
-        });
+          transaction.update(photoRef, {
+            trainingLabels: updatedLabels,
+            trainingLabelStatus: {
+              consensus,
+              lastLabeledBy: userEmail,
+              lastLabeledAt: serverTimestamp(),
+              totalVoters,
+              correctVotes,
+              incorrectVotes,
+            },
+          });
       });
     } catch (e: any) {
       console.error("Error al etiquetar:", e);
