@@ -51,11 +51,11 @@ type Props = {
 
 function Label({ children, tip }: { children: React.ReactNode; tip?: string }) {
   return (
-    <div className="text-sm flex items-center gap-2">
+    <div className="text-base flex items-center gap-2 font-medium">
       <span>{children}</span>
       {tip && (
         <span
-          className="inline-flex items-center justify-center w-4 h-4 text-[10px] rounded-full bg-neutral-800 text-neutral-300"
+          className="inline-flex items-center justify-center w-5 h-5 text-xs rounded-full bg-neutral-800 text-neutral-300"
           title={tip}
           aria-label={tip}
         >
@@ -122,7 +122,7 @@ export default function ToolbarFilters({
             
             {/* Toggle entre días predefinidos y rango personalizado */}
             {setUseDateRange && (
-              <label className="flex items-center gap-2 text-xs text-neutral-400 cursor-pointer">
+              <label className="flex items-center gap-2 text-sm text-neutral-400 cursor-pointer">
                 <input
                   type="checkbox"
                   checked={useDateRange}
@@ -143,10 +143,10 @@ export default function ToolbarFilters({
               // Rango de fechas personalizado
               <div className="flex items-center gap-2">
                 <div className="flex flex-col">
-                  <label className="text-xs text-neutral-400 mb-1">Desde</label>
+                  <label className="text-sm text-neutral-400 mb-1 font-medium">Desde</label>
                   <input
                     type="date"
-                    className="input text-sm"
+                    className="input text-base"
                     value={dateFrom}
                     min={CUTOFF_DATE_STR}
                     max={dateTo || today}
@@ -159,10 +159,10 @@ export default function ToolbarFilters({
                   />
                 </div>
                 <div className="flex flex-col">
-                  <label className="text-xs text-neutral-400 mb-1">Hasta</label>
+                  <label className="text-sm text-neutral-400 mb-1 font-medium">Hasta</label>
                   <input
                     type="date"
-                    className="input text-sm"
+                    className="input text-base"
                     value={dateTo}
                     min={dateFrom || CUTOFF_DATE_STR}
                     max={today}
@@ -268,7 +268,7 @@ export default function ToolbarFilters({
       </div>
 
       {/* Fila de ayuda + mini-KPIs opcionales */}
-      <div className="mt-2 text-xs text-neutral-400 flex flex-wrap items-center gap-3">
+      <div className="mt-2 text-sm text-neutral-400 flex flex-wrap items-center gap-3">
         <span>
           Nota: <em>Rango</em> no altera "Uso sostenido"; éste usa su propia ventana (semanas).
         </span>

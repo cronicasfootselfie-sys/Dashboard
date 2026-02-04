@@ -16,7 +16,7 @@ export default function Tabs({ tabs, value, onChange }: Props) {
           <button
             key={t.id}
             onClick={() => onChange(t.id)}
-            className={`px-3 py-2 text-sm rounded-t-md border border-b-0 ${
+            className={`px-4 py-2.5 text-base font-medium rounded-t-md border border-b-0 ${
               value === t.id
                 ? "bg-neutral-900 border-neutral-800"
                 : "border-transparent hover:bg-neutral-900/40"

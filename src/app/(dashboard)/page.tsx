@@ -630,9 +630,9 @@ useEffect(() => {
 />
       {/* Banner contextual si está en modo "perfil" */}
       {mode === "profile" && (
-        <div className="text-xs px-3 py-2 rounded-md border border-neutral-800 bg-neutral-950">
-          <span className="opacity-70">Modo por perfil:</span>{" "}
-          <code className="font-mono">{profileId || "— sin perfil seleccionado —"}</code>
+        <div className="text-sm px-3 py-2 rounded-md border border-neutral-800 bg-neutral-950">
+          <span className="opacity-80 font-medium">Modo por perfil:</span>{" "}
+          <code className="font-mono text-base">{profileId || "— sin perfil seleccionado —"}</code>
         </div>
       )}
 
