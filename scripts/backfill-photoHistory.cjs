@@ -224,6 +224,8 @@ async function loadExistingStoragePathsForProfile(db, profileId) {
   // Cargamos TODOS los campos (no solo imageUrl) para poder ver storagePath también
   const snap = await db.collection("photoHistory").where("profileId", "==", profileId).get();
   const set = new Set();
+  // Map<fileSize, Array<{storagePath, timestamp}>> para detectar duplicados por tamaño Y tiempo
+  const sizeTimeMap = new Map();
   snap.forEach((doc) => {
     const data = doc.data() || {};
     
@@ -242,8 +244,21 @@ async function loadExistingStoragePathsForProfile(db, profileId) {
       const urlWithoutToken = url.split("&token=")[0].split("?token=")[0];
       if (urlWithoutToken) set.add(`url:${urlWithoutToken}`);
     }
+    
+    // 3. Si tiene fileSize Y es rejected, agregarlo al mapa para detección de duplicados
+    // Solo para rejected porque esos son los que tuvieron el problema de duplicados
+    if (data.rejected === true && typeof data.fileSize === "number" && data.fileSize > 0) {
+      const timestamp = data.capturedAt?.toMillis?.() || data.date?.toMillis?.() || null;
+      const storagePath = data.storagePath || decodeStoragePathFromFirebaseUrl(data.imageUrl);
+      if (storagePath && timestamp) {
+        if (!sizeTimeMap.has(data.fileSize)) {
+          sizeTimeMap.set(data.fileSize, []);
+        }
+        sizeTimeMap.get(data.fileSize).push({ storagePath, timestamp });
+      }
+    }
   });
-  return { count: snap.size, paths: set };
+  return { count: snap.size, paths: set, sizeTimeMap };
 }
 
 async function patchExistingBackfilledRejected({
@@ -384,6 +399,39 @@ async function backfillProfile({
     const urlWithoutToken = tempUrl.split("&token=")[0].split("?token=")[0];
     if (existing.paths.has(`url:${urlWithoutToken}`)) continue;
 
+    // Verificar duplicados por tamaño de archivo Y timestamp cercano
+    // Solo para archivos rejected, ya que esos son los que tuvieron el problema
+    // El bug original creaba múltiples archivos con el mismo tamaño y timestamps muy cercanos (segundos)
+    if (isRejectedByName(f.name)) {
+      try {
+        const [meta] = await f.getMetadata();
+        const fileSize = meta && meta.size ? Number(meta.size) : null;
+        const inferredDate = inferDateFromFilename(f.name);
+        const fileTimestamp = inferredDate ? inferredDate.getTime() : null;
+        
+        if (fileSize && fileSize > 0 && fileTimestamp && existing.sizeTimeMap && existing.sizeTimeMap.has(fileSize)) {
+          // Buscar si hay un archivo existente con el mismo tamaño Y timestamp muy cercano (dentro de 60 segundos)
+          // Esto indica que probablemente es el mismo archivo duplicado
+          const DUPLICATE_TIME_WINDOW_MS = 60 * 1000; // 60 segundos
+          const existingFiles = existing.sizeTimeMap.get(fileSize);
+          const isDuplicate = existingFiles.some(({ timestamp }) => {
+            const timeDiff = Math.abs(fileTimestamp - timestamp);
+            return timeDiff < DUPLICATE_TIME_WINDOW_MS;
+          });
+          
+          if (isDuplicate) {
+            // Ya existe un archivo con el mismo tamaño Y timestamp cercano
+            // Esto probablemente es un duplicado del bug de la app móvil, saltarlo
+            console.log(`  ⚠️  Saltando posible duplicado (mismo tamaño ${fileSize} bytes y timestamp cercano): ${storagePath}`);
+            continue;
+          }
+        }
+      } catch (e) {
+        // Si no podemos obtener metadata, continuar (no es crítico)
+        console.warn(`  ⚠️  No se pudo obtener metadata para ${storagePath}: ${e?.message || e}`);
+      }
+    }
+
     if (onlyRejected && !isRejectedByName(f.name)) continue;
 
     // filtro por fecha (si aplica) usando el timestamp del nombre
@@ -426,6 +474,15 @@ async function backfillProfile({
     });
     const imageUrl = buildFirebaseDownloadUrl(bucketName, storagePath, token);
 
+    // Obtener tamaño del archivo para guardarlo y prevenir duplicados futuros
+    let fileSize = null;
+    try {
+      const [meta] = await f.getMetadata();
+      fileSize = meta && meta.size ? Number(meta.size) : null;
+    } catch (e) {
+      // No crítico, continuar sin fileSize
+    }
+
     const ref = db.collection("photoHistory").doc();
     const doc = {
       id: ref.id,
@@ -439,6 +496,11 @@ async function backfillProfile({
       backfillSource: "storage",
       storagePath,
     };
+
+    // Guardar fileSize si está disponible (útil para detectar duplicados)
+    if (fileSize && fileSize > 0) {
+      doc.fileSize = fileSize;
+    }
 
     if (rejected) {
       doc.summary = rejectedSummary;
