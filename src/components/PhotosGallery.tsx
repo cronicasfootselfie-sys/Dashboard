@@ -1,14 +1,13 @@
 "use client";
 
-import React, { useEffect, useMemo, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import Card from "@/components/Card";
-import Image from "next/image";
-import { getFirestore, collection, getDocs, query, where, orderBy, limit, startAfter, QueryDocumentSnapshot, DocumentData, onSnapshot, doc, runTransaction, serverTimestamp, updateDoc } from "firebase/firestore";
-import { getSingleProfileIdByRedcap } from "@/lib/redcapFirestore";
+import { getSingleProfileIdByRedcap } from "@/lib/patientsClient";
+import { describeError, fetchJsonWithAuth } from "@/lib/authedFetch";
 import { useAuth } from "@/hooks/useAuth";
 
-// Fecha de corte: solo mostrar datos desde el 18/12/2025
-const CUTOFF_DATE = new Date('2025-12-18T00:00:00.000Z');
+// Las fotos se leen por /api/photos (Admin SDK en el servidor). La fecha de corte
+// (18/12/2025) se aplica allí.
 
 // Opciones de fotos por página
 const PHOTOS_PER_PAGE_OPTIONS = [10, 20, 50, 100, 200];
@@ -76,30 +75,30 @@ export default function PhotosGallery({
   const [rows, setRows] = useState<PhotoRow[]>([]);
   const [labelingPhotoId, setLabelingPhotoId] = useState<string | null>(null);
   
-  // Paginación
+  // Paginación por cursor: cursors[i] es el cursor de la página i+1 (la primera no tiene).
   const [photosPerPage, setPhotosPerPage] = useState(20);
-  const [currentPage, setCurrentPage] = useState(1);
-  const lastDocRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null);
-  const pageStackRef = useRef<QueryDocumentSnapshot<DocumentData>[]>([]); // Stack para navegación hacia atrás
-  const [hasNextPage, setHasNextPage] = useState(false);
-  const [hasPrevPage, setHasPrevPage] = useState(false);
-  const [totalPhotos, setTotalPhotos] = useState<number | null>(null);
-
-  const db = useMemo(() => getFirestore(), []);
+  const [cursors, setCursors] = useState<(string | null)[]>([null]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const currentPage = cursors.length;
+  const cursor = cursors[cursors.length - 1];
+  const hasNextPage = !!nextCursor;
+  const hasPrevPage = cursors.length > 1;
 
   // Decide qué profileId usar:
   // - Si estás en modo "profile": usa profileIdFromMode tal cual.
   // - Si estás en "global": sólo seguimos si hay redcapCode y resuelve a exactamente 1 perfil.
   const [resolvedProfileId, setResolvedProfileId] = useState<string | null>(null);
-  const [resolutionStatus, setResolutionStatus] = useState<"idle" | "ok" | "none" | "many">("idle");
+  const [resolutionStatus, setResolutionStatus] = useState<"idle" | "ok" | "none" | "many" | "error">("idle");
 
   useEffect(() => {
+    let cancelled = false;
     setResolvedProfileId(null);
     setResolutionStatus("idle");
     setRows([]);
-    setCurrentPage(1);
-    lastDocRef.current = null;
-    pageStackRef.current = [];
+    setErr(null);
+    setCursors([null]);
+    setNextCursor(null);
 
     (async () => {
       if (mode === "profile") {
@@ -118,22 +117,30 @@ export default function PhotosGallery({
         return;
       }
 
-      const r = await getSingleProfileIdByRedcap(redcapCode);
-      setResolutionStatus(r.status);
-      setResolvedProfileId(r.profileId ?? null);
+      try {
+        const r = await getSingleProfileIdByRedcap(redcapCode);
+        if (cancelled) return;
+        setResolutionStatus(r.status);
+        setResolvedProfileId(r.profileId ?? null);
+      } catch (e) {
+        console.error("PhotosGallery: resolver perfil", e);
+        if (cancelled) return;
+        setResolutionStatus("error");
+        setErr(describeError(e));
+      }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [mode, profileIdFromMode, redcapCode]);
 
   // Función para actualizar el label de entrenamiento
+  // El servidor registra el voto con el email del token y recalcula el consenso.
   const updateTrainingLabel = async (photoId: string, isCorrectFoot: boolean) => {
     if (!user?.email || !user?.uid) {
       setErr("Debes estar autenticado para etiquetar fotos");
       return;
     }
-
-    // Extraer valores para que TypeScript entienda que no son null
-    const userEmail = user.email;
-    const userId = user.uid;
 
     if (labelingPhotoId === photoId) {
       return; // Ya se está procesando
@@ -143,68 +150,28 @@ export default function PhotosGallery({
     setErr(null);
 
     try {
-      const photoRef = doc(db, "photoHistory", photoId);
-
-      await runTransaction(db, async (transaction) => {
-        const photoSnap = await transaction.get(photoRef);
-
-        if (!photoSnap.exists()) {
-          throw new Error("Foto no encontrada");
-        }
-
-        const currentData = photoSnap.data();
-        const existingLabels = currentData?.trainingLabels || {};
-
-        // Verificar si el usuario ya votó con el mismo valor (prevenir spam)
-        const userExistingVote = existingLabels[userEmail];
-        if (userExistingVote?.isCorrectFoot === isCorrectFoot) {
-          return; // Ya votó esto, no hacer nada
-        }
-
-        // Actualizar o crear el voto del usuario
-        const updatedLabels = {
-          ...existingLabels,
-          [userEmail]: {
-            isCorrectFoot,
-            labeledBy: userEmail,
-            labeledAt: serverTimestamp(),
-            userId: userId,
-          },
-        };
-
-        // Calcular consenso
-        const allVotes = Object.values(updatedLabels) as TrainingLabel[];
-        const correctVotes = allVotes.filter((v) => v.isCorrectFoot === true).length;
-        const incorrectVotes = allVotes.filter((v) => v.isCorrectFoot === false).length;
-        const totalVoters = allVotes.length;
-
-        let consensus: 'correct' | 'incorrect' | 'conflict' | 'pending' = 'pending';
-        if (correctVotes > incorrectVotes && incorrectVotes === 0) {
-          consensus = 'correct';
-        } else if (incorrectVotes > correctVotes && correctVotes === 0) {
-          consensus = 'incorrect';
-        } else if (correctVotes > 0 && incorrectVotes > 0) {
-          consensus = 'conflict';
-        } else if (correctVotes === incorrectVotes && correctVotes > 0) {
-          consensus = 'conflict';
-        }
-
-        // Actualizar documento
-          transaction.update(photoRef, {
-            trainingLabels: updatedLabels,
-            trainingLabelStatus: {
-              consensus,
-              lastLabeledBy: userEmail,
-              lastLabeledAt: serverTimestamp(),
-              totalVoters,
-              correctVotes,
-              incorrectVotes,
-            },
-          });
+      const updated = await fetchJsonWithAuth<{
+        id: string;
+        trainingLabels?: Record<string, TrainingLabel>;
+        trainingLabelStatus?: TrainingLabelStatus | null;
+      }>("/api/photos/label", {
+        method: "POST",
+        body: JSON.stringify({ photoId, isCorrectFoot }),
       });
+      setRows((prev) =>
+        prev.map((r) =>
+          r.id === photoId
+            ? {
+                ...r,
+                trainingLabels: updated.trainingLabels,
+                trainingLabelStatus: updated.trainingLabelStatus ?? undefined,
+              }
+            : r
+        )
+      );
     } catch (e: any) {
       console.error("Error al etiquetar:", e);
-      setErr(e?.message || "Error al etiquetar la foto");
+      setErr(describeError(e));
     } finally {
       // Permitir nuevo click después de 500ms
       setTimeout(() => {
@@ -213,135 +180,60 @@ export default function PhotosGallery({
     }
   };
 
-  // Cargar fotos con paginación y actualización en tiempo real
+  // Cargar la página actual de fotos
   useEffect(() => {
-    setErr(null);
-    setRows([]);
-
     // sólo cargamos si tenemos un profileId resuelto:
     if (resolutionStatus !== "ok" || !resolvedProfileId) {
       return;
     }
 
+    let cancelled = false;
     setLoading(true);
+    setErr(null);
 
-    // Construir query base
-    let q = query(
-      collection(db, "photoHistory"),
-      where("profileId", "==", resolvedProfileId),
-      where("date", ">=", CUTOFF_DATE),
-      orderBy("date", "desc"),
-      limit(photosPerPage + 1) // +1 para verificar si hay siguiente página
-    );
+    const params = new URLSearchParams({ profileId: resolvedProfileId, limit: String(photosPerPage) });
+    if (cursor) params.set("cursor", cursor);
 
-    // Si no es la primera página, usar startAfter con el documento del stack
-    if (currentPage > 1) {
-      // Si tenemos el documento de la página anterior en el stack, usarlo
-      if (pageStackRef.current.length >= currentPage - 1) {
-        const docToStartAfter = pageStackRef.current[currentPage - 2];
-        q = query(
-          collection(db, "photoHistory"),
-          where("profileId", "==", resolvedProfileId),
-          where("date", ">=", CUTOFF_DATE),
-          orderBy("date", "desc"),
-          startAfter(docToStartAfter),
-          limit(photosPerPage + 1)
-        );
-      } else {
-        // Si retrocedimos y no tenemos el doc en el stack, recargar desde inicio
-        const skipPages = currentPage - 1;
-        const skipDocs = skipPages * photosPerPage;
-        q = query(
-          collection(db, "photoHistory"),
-          where("profileId", "==", resolvedProfileId),
-          where("date", ">=", CUTOFF_DATE),
-          orderBy("date", "desc"),
-          limit(skipDocs + photosPerPage + 1)
-        );
-      }
-    }
+    fetchJsonWithAuth<{ photos: PhotoRow[]; nextCursor: string | null }>(`/api/photos?${params}`)
+      .then((r) => {
+        if (cancelled) return;
+        setRows(r.photos ?? []);
+        setNextCursor(r.nextCursor ?? null);
+      })
+      .catch((e) => {
+        console.error("Error leyendo fotos:", e);
+        if (cancelled) return;
+        setRows([]);
+        setNextCursor(null);
+        setErr(describeError(e));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
 
-    // Usar onSnapshot para actualización en tiempo real
-    const unsubscribe = onSnapshot(
-      q,
-      (snap) => {
-        let docs = snap.docs;
+    return () => {
+      cancelled = true;
+    };
+  }, [resolvedProfileId, resolutionStatus, photosPerPage, cursor, reloadKey]);
 
-        // Si recargamos desde el inicio (para retroceder), saltar las páginas anteriores
-        if (currentPage > 1 && pageStackRef.current.length < currentPage - 1) {
-          const skipPages = currentPage - 1;
-          const skipDocs = skipPages * photosPerPage;
-          docs = docs.slice(skipDocs);
-        }
-
-        // Verificar si hay siguiente página
-        const hasMore = docs.length > photosPerPage;
-        if (hasMore) {
-          docs.pop(); // Remover el documento extra
-        }
-
-        setHasNextPage(hasMore);
-        setHasPrevPage(currentPage > 1);
-
-        // Guardar último documento para navegación hacia adelante
-        if (docs.length > 0) {
-          const newLastDoc = docs[docs.length - 1];
-          lastDocRef.current = newLastDoc;
-
-          // Si avanzamos a una nueva página, guardar en el stack
-          if (currentPage > pageStackRef.current.length) {
-            pageStackRef.current = [...pageStackRef.current, newLastDoc];
-          }
-        }
-
-        const items: PhotoRow[] = docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as any),
-        }));
-        setRows(items);
-        setLoading(false);
-      },
-      (error) => {
-        console.error("Error en snapshot:", error);
-        setErr(error?.message || "Error leyendo photoHistory");
-        setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [db, resolvedProfileId, resolutionStatus, photosPerPage, currentPage]);
-
-  // Resetear a página 1 cuando cambia photosPerPage
-  useEffect(() => {
-    if (currentPage !== 1) {
-      setCurrentPage(1);
-      lastDocRef.current = null;
-      pageStackRef.current = [];
-    }
-  }, [photosPerPage]);
+  // Cambiar el tamaño de página vuelve a la página 1
+  const changePhotosPerPage = (n: number) => {
+    setPhotosPerPage(n);
+    setCursors([null]);
+  };
 
   const handleNextPage = () => {
-    if (hasNextPage && lastDocRef.current) {
-      // Guardar el último doc actual en el stack antes de avanzar
-      pageStackRef.current = [...pageStackRef.current, lastDocRef.current];
-      setCurrentPage(prev => prev + 1);
-    }
+    if (nextCursor) setCursors((prev) => [...prev, nextCursor]);
   };
 
   const handlePrevPage = () => {
-    if (hasPrevPage && currentPage > 1) {
-      // Para retroceder, recargamos desde el inicio y saltamos las páginas anteriores
-      // Esto es más simple aunque menos eficiente
-      const targetPage = currentPage - 1;
-      setCurrentPage(targetPage);
-      // Limpiar el stack hasta la página objetivo
-      pageStackRef.current = pageStackRef.current.slice(0, targetPage - 1);
-      lastDocRef.current = null;
-    }
+    setCursors((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev));
   };
 
   // UI según estado de resolución:
+  if (resolutionStatus === "error") {
+    return <Card title="Fotos"><div className="p-4 text-base text-red-400">⚠ No se pudo cargar la lista de pacientes: {err}</div></Card>;
+  }
   if (mode === "global" && !redcapCode) {
     return <Card title="Fotos"><div className="p-4 text-base text-neutral-400">Selecciona un <b>REDCap code</b> para ver fotos.</div></Card>;
   }
@@ -353,7 +245,7 @@ export default function PhotosGallery({
   }
 
   return (
-    <Card title={`Fotos${totalPhotos !== null ? ` (${totalPhotos})` : ""}`}>
+    <Card title="Fotos">
       {/* Controles de paginación */}
       {resolutionStatus === "ok" && resolvedProfileId && (
         <div className="p-4 border-b border-neutral-800 flex flex-col sm:flex-row gap-4 items-center justify-between">
@@ -361,7 +253,7 @@ export default function PhotosGallery({
             <label className="text-base text-neutral-400 font-medium">Fotos por página:</label>
             <select
               value={photosPerPage}
-              onChange={(e) => setPhotosPerPage(Number(e.target.value))}
+              onChange={(e) => changePhotosPerPage(Number(e.target.value))}
               className="px-3 py-2 bg-neutral-900 border border-neutral-700 rounded text-base text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               {PHOTOS_PER_PAGE_OPTIONS.map((n) => (
@@ -390,12 +282,21 @@ export default function PhotosGallery({
             >
               Siguiente →
             </button>
+            <button
+              onClick={() => setReloadKey((k) => k + 1)}
+              disabled={loading}
+              className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 disabled:cursor-not-allowed border border-neutral-700 rounded text-base text-neutral-200 transition-colors font-medium"
+              title="Volver a cargar esta página"
+            >
+              ↻ Actualizar
+            </button>
           </div>
         </div>
       )}
 
+      {err && <div className="p-4 text-base text-red-400">⚠ {err}</div>}
       {loading && <div className="p-4 text-base text-neutral-300">Cargando fotos…</div>}
-      {!loading && rows.length === 0 && <div className="p-4 text-base text-neutral-400">No hay fotos para este perfil.</div>}
+      {!loading && !err && rows.length === 0 && <div className="p-4 text-base text-neutral-400">No hay fotos para este perfil.</div>}
 
       {!loading && rows.length > 0 && (
         <>

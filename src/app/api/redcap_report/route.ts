@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { rejectIfNotAdmin } from "@/lib/server/requireAdmin";
 
 const norm = (s: any) =>
   String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -56,6 +57,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const denied = await rejectIfNotAdmin(req);
+  if (denied) return denied;
+
   console.log("📨 Received REDCap API request");
   
   let body;

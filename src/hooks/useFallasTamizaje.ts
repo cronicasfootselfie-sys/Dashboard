@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { fetchWithAuth } from "@/lib/authedFetch";
 
 type RedcapOption = { label: string; value: string };
 
@@ -49,7 +50,7 @@ export function useFallasTamizaje(
         }
 
         const requests = codes.map(code =>
-          fetch("/api/redcap_report", {
+          fetchWithAuth("/api/redcap_report", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ reportId: "1219", pacode: code }),

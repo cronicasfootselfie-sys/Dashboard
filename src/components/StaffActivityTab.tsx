@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { fetchWithAuth } from "@/lib/authedFetch";
 import Card from "@/components/Card";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
@@ -64,7 +65,7 @@ export default function StaffActivityTab() {
   // ---- carga nombres (autocomplete) del rango actual ----
   async function bootstrapUsers() {
     try {
-      const res = await fetch("/api/redcap_log", {
+      const res = await fetchWithAuth("/api/redcap_log", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -92,7 +93,7 @@ export default function StaffActivityTab() {
   async function fetchLogs() {
     setLoading(true); setErr(null); setRows([]); setSelectedDay(null);
     try {
-      const res = await fetch("/api/redcap_log", {
+      const res = await fetchWithAuth("/api/redcap_log", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

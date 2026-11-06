@@ -35,6 +35,42 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
+## Acceso a datos (rutas API del servidor)
+
+El navegador **no lee Firestore directamente**. Desde el 2026-09-24 las reglas de seguridad solo
+dejan leer `users`, `photoHistory` y `sessions` a su dueño, así que pacientes, fotos y el
+etiquetado pasan por rutas API que usan Firebase Admin SDK:
+
+| Ruta | Qué hace |
+|---|---|
+| `GET /api/patients` | Usuarios con `redcap_code` y su primer perfil |
+| `GET /api/photos?profileId=&limit=&cursor=` | Fotos de un perfil desde el 18/12/2025, paginadas por cursor |
+| `POST /api/photos/label` | Voto del evaluador (`{ photoId, isCorrectFoot }`) y consenso |
+| `POST /api/redcap_report`, `/api/redcap_log`, `/redcap_report` | Proxy a REDCap |
+
+Todas exigen `Authorization: Bearer <ID token>` de un administrador: custom claim `admin: true`
+o un documento `admins/{uid}` en Firestore. Si no, responden `401 NO_TOKEN` / `401 INVALID_TOKEN`
+/ `403 NOT_ADMIN`.
+
+### Variables de entorno del servidor
+
+- `FIREBASE_SERVICE_ACCOUNT_KEY`: JSON de una cuenta de servicio del proyecto
+  `foot-selfie---multiplatform` (en texto o en base64). **Obligatoria en Vercel** para Production y Preview.
+- En local se puede usar `GOOGLE_APPLICATION_CREDENTIALS=<ruta al JSON>` en su lugar.
+- `REDCAP_TOKEN`, `REDCAP_URL`: como antes.
+
+Si falta la credencial, las rutas responden `500 SERVER_MISCONFIGURED` y el dashboard lo muestra.
+
+### Pruebas
+
+```bash
+npm test                 # unitarias
+npm run test:emulators   # + integración contra emuladores de Auth y Firestore
+```
+
+`test:emulators` necesita `firebase-tools` y Java 11+. Usa el proyecto `demo-footselfie`,
+así que nunca toca datos reales.
+
 ## Backfill de fotos (Storage -> Firestore)
 
 El dashboard **NO lista Storage**; solo muestra lo que exista como documento en la colección **Firestore `photoHistory`**.

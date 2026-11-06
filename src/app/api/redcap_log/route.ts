@@ -2,8 +2,12 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
+import { rejectIfNotAdmin } from "@/lib/server/requireAdmin";
 
 export async function POST(req: Request) {
+  const denied = await rejectIfNotAdmin(req);
+  if (denied) return denied;
+
   try {
     const { beginTime, endTime, username } = await req.json();
     const token = process.env.REDCAP_TOKEN;
