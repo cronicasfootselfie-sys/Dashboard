@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
+import { fetchWithAuth } from "@/lib/authedFetch";
 import Card from "@/components/Card";
 import Tabs from "@/components/Tabs";
 
@@ -298,7 +299,7 @@ export default function RedcapReportTabs({ mode, profileCode, defaultCode }: Pro
         if (effective) body.pacode = effective; // "" = Todos (sin pacode)
       }
 
-      const res = await fetch("/api/redcap_report", {
+      const res = await fetchWithAuth("/api/redcap_report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

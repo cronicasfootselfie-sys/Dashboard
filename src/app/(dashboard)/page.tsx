@@ -18,6 +18,7 @@ import { LESION_COLORS, colorForUnknown } from "@/utils/lesionColors";
 import StaffActivityTab from "@/components/StaffActivityTab";
 import AlertHallazgosGlobal from "@/components/AlertHallazgosGlobal";
 import AlertFallasTecnicas from "@/components/AlertFallasTecnicas";
+import { fetchWithAuth } from "@/lib/authedFetch";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid,
   BarChart, Bar, PieChart, Pie, ResponsiveContainer, Cell,
@@ -101,7 +102,7 @@ function Empty({ msg = "Sin datos para el filtro actual" }: { msg?: string }) {
 export default function DashboardPage() {
   // Filtros base (rango e “uso sostenido”)
   const { user, userRole } = useAuth();
-  const { options: redcapOptions, loading: loadingRedcapCodes } = useRedcapOptions();
+  const { options: redcapOptions, loading: loadingRedcapCodes, error: redcapCodesError } = useRedcapOptions();
   const [days, setDays] = useState<number | "all">(30);
   
   // 🆕 Rango de fechas personalizado
@@ -138,6 +139,7 @@ export default function DashboardPage() {
   const profileFilter = mode === "profile" && profileId ? profileId : undefined;
 const {
   loading: loadingRedcap,
+  error: patientsError,
   profileToRedcapMap,            // ⬅️ ahora aquí
   profileIdsByRedcap,
   allProfilesWithAnyRedcap,
@@ -163,7 +165,7 @@ async function computeFallasTamizaje() {
     const body: any = { reportId: "1219" };
     if (redcapFromUrl) body.pacode = redcapFromUrl; // ← solo si hay redcap seleccionado
 
-    const res = await fetch("/api/redcap_report", {
+    const res = await fetchWithAuth("/api/redcap_report", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -496,7 +498,7 @@ useEffect(() => {
 
     for (const code of missing) {
       try {
-        const res = await fetch("/api/redcap_report", {
+        const res = await fetchWithAuth("/api/redcap_report", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ reportId: "1219", pacode: code }),
@@ -622,6 +624,11 @@ useEffect(() => {
       />
 
       {error && <div className="text-sm text-red-400">⚠ {error}</div>}
+      {(patientsError || redcapCodesError) && (
+        <div className="text-sm text-red-400">
+          ⚠ No se pudo cargar la lista de pacientes: {patientsError || redcapCodesError}
+        </div>
+      )}
 
       <Tabs
   value={tab}

@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { getProfilesByUserRedcap, getAllProfilesWithAnyRedcap, getProfileToRedcapMap, getProfileIdsByRedcap } from "@/lib/redcapFirestore";
+import { getProfileToRedcapMap, getProfileIdsByRedcap } from "@/lib/patientsClient";
+import { describeError } from "@/lib/authedFetch";
 
 export function useRedcapProfiles(selectedRedcap?: string) {
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [profileToRedcapMap, setMap] = useState<Record<string, string>>({});
   const [profileIdsByRedcap, setDict] = useState<Record<string, string[]>>({});
   const [allProfilesWithAnyRedcap, setAll] = useState<string[]>([]);
@@ -11,6 +13,7 @@ export function useRedcapProfiles(selectedRedcap?: string) {
     let cancel = false;
     (async () => {
       setLoading(true);
+      setError(null);
       try {
         const [map, dict] = await Promise.all([
           getProfileToRedcapMap(),
@@ -20,6 +23,9 @@ export function useRedcapProfiles(selectedRedcap?: string) {
         setMap(map);
         setDict(dict);
         setAll(Array.from(new Set(Object.values(dict).flat())));
+      } catch (e) {
+        console.error("useRedcapProfiles", e);
+        if (!cancel) setError(describeError(e));
       } finally {
         if (!cancel) setLoading(false);
       }
@@ -34,6 +40,7 @@ export function useRedcapProfiles(selectedRedcap?: string) {
 
   return {
     loading,
+    error,
     profileToRedcapMap,          // ⬅️ Mapa global
     profileIdsByRedcap,          // { redcap_code: [profileIds] }
     allProfilesWithAnyRedcap,    // [profileId, ...]

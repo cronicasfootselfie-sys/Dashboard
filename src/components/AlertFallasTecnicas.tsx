@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
+import { fetchWithAuth } from "@/lib/authedFetch";
 import Collapse from "@/components/Collapse";
 // ——— utils ———
 function norm(s: any) {
@@ -32,7 +33,7 @@ function getSolvedValue(row: any) {
 
 // fetch de un reporte REDCap (GLOBAL: sin pacode)
 async function fetchReportGlobal(reportId: string) {
-  const res = await fetch("/api/redcap_report", {
+  const res = await fetchWithAuth("/api/redcap_report", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ reportId }),
